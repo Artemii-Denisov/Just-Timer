@@ -38,7 +38,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "global_hotkeys_enabled": True,
     "show_hours": True,
     "window_x": None,
-    "window_y": None
+    "window_y": None,
+    "window_width": 330,
+    "window_height": 96
 }
 
 

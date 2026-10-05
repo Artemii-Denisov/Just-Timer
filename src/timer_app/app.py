@@ -60,8 +60,8 @@ class TimerApplication:
         self.root.attributes("-topmost", topmost)
         self.root.attributes("-alpha", alpha)
 
-        width = 330
-        height = 96
+        width = int(self.config_manager.get("window_width", 330))
+        height = int(self.config_manager.get("window_height", 96))
         self.root.geometry(f"{width}x{height}")
 
         # Позиционирование окна
@@ -88,6 +88,7 @@ class TimerApplication:
             fg_color=fg,
             on_click=self.handle_toggle,
             on_drag_end=self.handle_drag_end,
+            on_resize_end=self.handle_resize_end,
             on_wheel=self.handle_wheel,
             on_reset=self.handle_reset,
             on_context_menu=self.handle_context_menu,
@@ -211,6 +212,11 @@ class TimerApplication:
     def handle_drag_end(self):
         self.config_manager.set("window_x", self.root.winfo_x())
         self.config_manager.set("window_y", self.root.winfo_y())
+        self.config_manager.save()
+
+    def handle_resize_end(self):
+        self.config_manager.set("window_width", self.root.winfo_width())
+        self.config_manager.set("window_height", self.root.winfo_height())
         self.config_manager.save()
 
     def handle_context_menu(self, event: tk.Event):
@@ -370,5 +376,7 @@ class TimerApplication:
             self.hotkeys_manager.stop()
         self.config_manager.set("window_x", self.root.winfo_x())
         self.config_manager.set("window_y", self.root.winfo_y())
+        self.config_manager.set("window_width", self.root.winfo_width())
+        self.config_manager.set("window_height", self.root.winfo_height())
         self.config_manager.save()
         self.root.destroy()
