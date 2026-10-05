@@ -2,6 +2,8 @@
 Главный контроллер приложения таймера Just Timer.
 """
 
+import sys
+import os
 import tkinter as tk
 from tkinter import simpledialog, messagebox, colorchooser, filedialog
 from typing import Optional
@@ -16,6 +18,14 @@ from .utils.sound import play_finish_sound, preview_sound, SOUND_PRESETS
 from .utils.hotkeys import GlobalHotkeysManager
 
 TRANSPARENT_COLOR_KEY = "#010101"
+
+
+def get_asset_path(filename: str) -> str:
+    """Возвращает путь к ресурсу assets/ для скрипта и собранного exe."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, "assets", filename)
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base_dir, "assets", filename)
 
 
 class TimerApplication:
@@ -72,6 +82,24 @@ class TimerApplication:
 
     def setup_window(self):
         self.root.title("Just Timer")
+
+        # Установка иконки приложения
+        ico_path = get_asset_path("icon.ico")
+        if os.path.exists(ico_path):
+            try:
+                self.root.iconbitmap(ico_path)
+            except Exception:
+                pass
+
+        png_path = get_asset_path("icon.png")
+        if os.path.exists(png_path):
+            try:
+                icon_img = tk.PhotoImage(file=png_path)
+                self.root.iconphoto(True, icon_img)
+                self._icon_ref = icon_img
+            except Exception:
+                pass
+
         self.root.overrideredirect(True)
 
         topmost = bool(self.config_manager.get("topmost", True))
