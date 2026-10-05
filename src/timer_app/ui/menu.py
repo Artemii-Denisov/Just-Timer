@@ -27,6 +27,10 @@ class TimerContextMenu:
         on_set_sound_type: Callable[[str], None],
         on_choose_custom_sound: Callable[[], None],
         on_preview_sound: Callable[[], None],
+        on_toggle_round_sound: Callable[[], None],
+        on_set_round_sound_type: Callable[[str], None],
+        on_choose_round_custom_sound: Callable[[], None],
+        on_preview_round_sound: Callable[[], None],
         on_toggle_global_hotkeys: Callable[[], None],
         on_set_rounds: Callable[[int, float, float], None],
         on_custom_rounds: Callable[[], None],
@@ -35,6 +39,8 @@ class TimerContextMenu:
         initial_topmost: bool = True,
         initial_sound: bool = True,
         initial_sound_type: str = "Дзынь (Ding)",
+        initial_round_sound: bool = True,
+        initial_round_sound_type: str = "Короткий сигнал (Beep)",
         initial_transparent_bg: bool = False,
         initial_global_hotkeys: bool = True
     ):
@@ -155,7 +161,35 @@ class TimerContextMenu:
         )
         sound_submenu.add_separator()
         sound_submenu.add_command(label="▶ Прослушать звук", command=on_preview_sound)
-        self.menu.add_cascade(label="🔔 Звук окончания", menu=sound_submenu)
+        self.menu.add_cascade(label="🔔 Звук окончания таймера", menu=sound_submenu)
+
+        # 8. Настройка звука окончания круга/раунда
+        round_sound_submenu = tk.Menu(self.menu, tearoff=0)
+        self.round_sound_var = tk.BooleanVar(value=initial_round_sound)
+        round_sound_submenu.add_checkbutton(
+            label="🔔 Звук окончания круга",
+            variable=self.round_sound_var,
+            command=on_toggle_round_sound
+        )
+        round_sound_submenu.add_separator()
+
+        self.round_sound_type_var = tk.StringVar(value=initial_round_sound_type)
+        for s_name in SOUND_PRESETS.keys():
+            round_sound_submenu.add_radiobutton(
+                label=s_name,
+                variable=self.round_sound_type_var,
+                value=s_name,
+                command=lambda s=s_name: on_set_round_sound_type(s)
+            )
+        round_sound_submenu.add_radiobutton(
+            label="Пользовательский (.wav)...",
+            variable=self.round_sound_type_var,
+            value="Пользовательский",
+            command=on_choose_round_custom_sound
+        )
+        round_sound_submenu.add_separator()
+        round_sound_submenu.add_command(label="▶ Прослушать звук", command=on_preview_round_sound)
+        self.menu.add_cascade(label="🔁 Звук окончания круга", menu=round_sound_submenu)
 
         # 8. Горячие клавиши
         hotkeys_submenu = tk.Menu(self.menu, tearoff=0)

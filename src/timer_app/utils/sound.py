@@ -16,12 +16,23 @@ except ImportError:
 # Встроенные пресеты звуков Windows
 SOUND_PRESETS: Dict[str, str] = {
     "Дзынь (Ding)": r"C:\Windows\Media\ding.wav",
+    "Короткий сигнал (Beep)": "SHORT_BEEP",
     "Колокольчики (Chimes)": r"C:\Windows\Media\chimes.wav",
     "Уведомление (Notify)": r"C:\Windows\Media\notify.wav",
     "Та-да! (Tada)": r"C:\Windows\Media\tada.wav",
     "Будильник (Alarm)": r"C:\Windows\Media\Alarm01.wav",
     "Мелодичный перезвон (Beep)": "BEEP",
 }
+
+
+def _play_short_beep():
+    """Синтезирует четкий одиночный сигнал окончания круга."""
+    if not winsound:
+        return
+    try:
+        winsound.Beep(1046, 180)  # C6, 180ms
+    except Exception:
+        pass
 
 
 def _play_melodic_beep():
@@ -50,6 +61,10 @@ def play_sound_by_type(sound_type: str, custom_path: Optional[str] = None):
                 winsound.PlaySound(custom_path, winsound.SND_FILENAME)
                 return
 
+            if sound_type == "Короткий сигнал (Beep)":
+                _play_short_beep()
+                return
+
             if sound_type == "Мелодичный перезвон (Beep)":
                 _play_melodic_beep()
                 return
@@ -67,7 +82,12 @@ def play_sound_by_type(sound_type: str, custom_path: Optional[str] = None):
 
 
 def play_finish_sound(sound_type: str = "Дзынь (Ding)", custom_path: Optional[str] = None):
-    """Воспроизведение звука при окончании таймера."""
+    """Воспроизведение звука при окончании таймера (все круги завершены)."""
+    play_sound_by_type(sound_type, custom_path)
+
+
+def play_round_sound(sound_type: str = "Короткий сигнал (Beep)", custom_path: Optional[str] = None):
+    """Воспроизведение звука при завершении промежуточного круга/раунда."""
     play_sound_by_type(sound_type, custom_path)
 
 

@@ -14,7 +14,7 @@ from .ui.display import TimerDisplay
 from .ui.menu import TimerContextMenu
 from .ui.themes import THEMES
 from .utils.time_parser import parse_time_input, format_time
-from .utils.sound import play_finish_sound, preview_sound, SOUND_PRESETS
+from .utils.sound import play_finish_sound, play_round_sound, preview_sound, SOUND_PRESETS
 from .utils.hotkeys import GlobalHotkeysManager
 
 TRANSPARENT_COLOR_KEY = "#010101"
@@ -212,6 +212,10 @@ class TimerApplication:
             on_set_sound_type=self.handle_set_sound_type,
             on_choose_custom_sound=self.handle_choose_custom_sound,
             on_preview_sound=self.handle_preview_sound,
+            on_toggle_round_sound=self.handle_toggle_round_sound,
+            on_set_round_sound_type=self.handle_set_round_sound_type,
+            on_choose_round_custom_sound=self.handle_choose_round_custom_sound,
+            on_preview_round_sound=self.handle_preview_round_sound,
             on_toggle_global_hotkeys=self.handle_toggle_global_hotkeys,
             on_set_rounds=self.handle_set_rounds,
             on_custom_rounds=self.handle_custom_rounds,
@@ -220,6 +224,8 @@ class TimerApplication:
             initial_topmost=bool(self.config_manager.get("topmost", True)),
             initial_sound=bool(self.config_manager.get("sound_enabled", True)),
             initial_sound_type=self.config_manager.get("sound_type", "Дзынь (Ding)"),
+            initial_round_sound=bool(self.config_manager.get("round_sound_enabled", True)),
+            initial_round_sound_type=self.config_manager.get("round_sound_type", "Короткий сигнал (Beep)"),
             initial_transparent_bg=bool(self.config_manager.get("transparent_bg", False)),
             initial_global_hotkeys=bool(self.config_manager.get("global_hotkeys_enabled", True))
         )
@@ -293,10 +299,10 @@ class TimerApplication:
             ev = self.engine.last_event
             if ev in ("round_next", "round_rest"):
                 # Звуковой сигнал завершения круга / начала отдыха
-                if self.config_manager.get("sound_enabled", True):
-                    sound_type = self.config_manager.get("sound_type", "Дзынь (Ding)")
-                    custom_path = self.config_manager.get("custom_sound_path", "")
-                    play_finish_sound(sound_type, custom_path)
+                if self.config_manager.get("round_sound_enabled", True):
+                    round_sound_type = self.config_manager.get("round_sound_type", "Короткий сигнал (Beep)")
+                    custom_path = self.config_manager.get("round_custom_sound_path", "")
+                    play_round_sound(round_sound_type, custom_path)
                 self.flash_alert(max_steps=4)
                 self.root.after(100, self._schedule_tick)
                 return
@@ -498,6 +504,34 @@ class TimerApplication:
     def handle_preview_sound(self):
         sound_type = self.context_menu.sound_type_var.get()
         custom_path = self.config_manager.get("custom_sound_path", "")
+        preview_sound(sound_type, custom_path)
+
+    def handle_toggle_round_sound(self):
+        val = self.context_menu.round_sound_var.get()
+        self.config_manager.set("round_sound_enabled", val)
+        self.config_manager.save()
+
+    def handle_set_round_sound_type(self, sound_type: str):
+        self.config_manager.set("round_sound_type", sound_type)
+        self.config_manager.save()
+        preview_sound(sound_type, self.config_manager.get("round_custom_sound_path"))
+
+    def handle_choose_round_custom_sound(self):
+        path = filedialog.askopenfilename(
+            title="Выберите звуковой файл окончания круга (.wav)",
+            filetypes=[("WAV Audio", "*.wav"), ("Все файлы", "*.*")],
+            parent=self.root
+        )
+        if path:
+            self.config_manager.set("round_sound_type", "Пользовательский")
+            self.config_manager.set("round_custom_sound_path", path)
+            self.context_menu.round_sound_type_var.set("Пользовательский")
+            self.config_manager.save()
+            preview_sound("Пользовательский", path)
+
+    def handle_preview_round_sound(self):
+        sound_type = self.context_menu.round_sound_type_var.get()
+        custom_path = self.config_manager.get("round_custom_sound_path", "")
         preview_sound(sound_type, custom_path)
 
     def handle_toggle_global_hotkeys(self):
