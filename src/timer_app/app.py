@@ -1,5 +1,5 @@
 """
-Главный контроллер приложения таймера.
+Главный контроллер приложения таймера Just Timer.
 """
 
 import tkinter as tk
@@ -23,13 +23,21 @@ class TimerApplication:
         self.root = root
         self.config_manager = ConfigManager(config_path)
 
-        # Инициализация ядра таймера
+        # Инициализация ядра таймера (с поддержкой кругов и интервалов)
         initial_secs = self.config_manager.get("initial_time", 900)
-        self.engine = TimerEngine(initial_duration=initial_secs)
+        total_rounds = int(self.config_manager.get("total_rounds", 1))
+        rest_duration = float(self.config_manager.get("rest_duration", 0.0))
+
+        self.engine = TimerEngine(
+            initial_duration=initial_secs,
+            total_rounds=total_rounds,
+            rest_duration=rest_duration
+        )
 
         # Состояние анимации мигания
         self.flashing = False
         self.flash_step = 0
+        self.max_flash_steps = 12
 
         # Глобальные горячие клавиши (Ctrl+Alt+Space, Ctrl+Alt+R)
         self.hotkeys_manager = GlobalHotkeysManager(
@@ -47,9 +55,20 @@ class TimerApplication:
         self.display.update_time_text(
             format_time(self.engine.remaining, self.config_manager.get("show_hours", True))
         )
+        self.update_initial_status()
 
         # Автоматическая фокусировка при старте
         self.root.after(100, lambda: self.root.focus_force())
+
+    def update_initial_status(self):
+        """Отображение начального статуса в зависимости от режима."""
+        if self.engine.total_rounds > 1:
+            rest_str = f" (+{int(self.engine.rest_duration)}с отдых)" if self.engine.rest_duration > 0 else ""
+            self.display.set_status_text(f"Круг 1/{self.engine.total_rounds}{rest_str} • Готов к старту")
+        elif self.engine.total_rounds == 0:
+            self.display.set_status_text("Режим: Бесконечный цикл • Готов к старту")
+        else:
+            self.display.set_status_text("ЛКМ: старт | ПКМ: меню")
 
     def setup_window(self):
         self.root.title("Just Timer")
@@ -113,6 +132,9 @@ class TimerApplication:
             on_choose_custom_sound=self.handle_choose_custom_sound,
             on_preview_sound=self.handle_preview_sound,
             on_toggle_global_hotkeys=self.handle_toggle_global_hotkeys,
+            on_set_rounds=self.handle_set_rounds,
+            on_custom_rounds=self.handle_custom_rounds,
+            on_toggle_infinite_loop=self.handle_toggle_infinite_loop,
             on_exit=self.exit_app,
             initial_topmost=bool(self.config_manager.get("topmost", True)),
             initial_sound=bool(self.config_manager.get("sound_enabled", True)),
@@ -123,7 +145,6 @@ class TimerApplication:
         self.apply_current_colors()
 
     def bind_global_shortcuts(self):
-        # Привязка на окно и на дисплей для мгновенной реакции
         for target in [self.root, self.display, self.display.label, self.display.sub_label]:
             target.bind("<space>", lambda e: self.handle_toggle())
             target.bind("<r>", lambda e: self.handle_reset())
@@ -150,24 +171,66 @@ class TimerApplication:
 
         is_running = self.engine.toggle()
         if is_running:
-            self.display.set_status_text("▶ Таймер запущен")
+            self.update_running_status()
             self._schedule_tick()
         else:
-            self.display.set_status_text("⏸ Пауза (клик для продолжения)")
+            if self.engine.total_rounds > 1:
+                self.display.set_status_text(f"⏸ Пауза (Круг {self.engine.current_round}/{self.engine.total_rounds})")
+            elif self.engine.total_rounds == 0:
+                self.display.set_status_text(f"⏸ Пауза (Круг {self.engine.current_round}/∞)")
+            else:
+                self.display.set_status_text("⏸ Пауза (клик для продолжения)")
+
+    def update_running_status(self):
+        """Обновляет строку статуса при работающем таймере."""
+        if self.engine.total_rounds > 1:
+            if self.engine.is_rest:
+                next_round = min(self.engine.total_rounds, self.engine.current_round + 1)
+                self.display.set_status_text(f"☕ Отдых (перед кругом {next_round}/{self.engine.total_rounds})")
+            else:
+                self.display.set_status_text(f"▶ Круг {self.engine.current_round}/{self.engine.total_rounds} • Работа")
+        elif self.engine.total_rounds == 0:
+            if self.engine.is_rest:
+                self.display.set_status_text(f"☕ Отдых (перед кругом {self.engine.current_round + 1}/∞)")
+            else:
+                self.display.set_status_text(f"▶ Круг {self.engine.current_round}/∞ • Автоповтор")
+        else:
+            self.display.set_status_text("▶ Таймер запущен")
 
     def _schedule_tick(self):
         if not self.engine.is_running:
             return
 
-        remaining, is_finished = self.engine.tick()
+        remaining, is_event = self.engine.tick()
         show_hours = self.config_manager.get("show_hours", True)
         self.display.update_time_text(format_time(remaining, show_hours))
 
-        if is_finished:
-            self.display.set_status_text("✓ Время вышло!")
-            self.trigger_finished()
-        else:
-            self.root.after(100, self._schedule_tick)
+        # Обновление строчки статуса
+        self.update_running_status()
+
+        if is_event:
+            ev = self.engine.last_event
+            if ev in ("round_next", "round_rest"):
+                # Звуковой сигнал завершения круга / начала отдыха
+                if self.config_manager.get("sound_enabled", True):
+                    sound_type = self.config_manager.get("sound_type", "Дзынь (Ding)")
+                    custom_path = self.config_manager.get("custom_sound_path", "")
+                    play_finish_sound(sound_type, custom_path)
+                self.flash_alert(max_steps=4)
+                self.root.after(100, self._schedule_tick)
+                return
+
+            elif ev == "all_finished":
+                # Все круги завершены!
+                if self.engine.total_rounds > 1:
+                    t = self.engine.total_rounds
+                    self.display.set_status_text(f"✓ Все {t} кругов завершены!")
+                else:
+                    self.display.set_status_text("✓ Время вышло!")
+                self.trigger_finished()
+                return
+
+        self.root.after(100, self._schedule_tick)
 
     def handle_reset(self):
         self.engine.reset()
@@ -177,7 +240,7 @@ class TimerApplication:
             format_time(self.engine.remaining, show_hours),
             fg=self.config_manager.get("fg_color")
         )
-        self.display.set_status_text("ЛКМ: старт | ПКМ: меню")
+        self.update_initial_status()
 
     def handle_set_duration(self, seconds: int):
         self.stop_flashing()
@@ -193,6 +256,81 @@ class TimerApplication:
         else:
             self.display.set_status_text(f"Установлено: {format_time(seconds, show_hours)}")
 
+    # === РЕЖИМ КРУГОВ И ИНТЕРВАЛОВ ===
+    def handle_set_rounds(self, total_rounds: int, work_duration: float, rest_duration: float = 0.0):
+        self.stop_flashing()
+        self.engine.set_rounds_mode(total_rounds, work_duration, rest_duration)
+        self.config_manager.set("total_rounds", total_rounds)
+        self.config_manager.set("initial_time", int(work_duration))
+        self.config_manager.set("rest_duration", int(rest_duration))
+        self.config_manager.save()
+
+        show_hours = self.config_manager.get("show_hours", True)
+        self.display.update_time_text(format_time(self.engine.remaining, show_hours))
+
+        if total_rounds > 1:
+            rest_str = f" (+{int(rest_duration)}с отдых)" if rest_duration > 0 else ""
+            self.display.set_status_text(f"Режим: {total_rounds} кругов по {format_time(work_duration, False)}{rest_str}")
+        elif total_rounds == 0:
+            self.display.set_status_text(f"Режим: Бесконечный цикл по {format_time(work_duration, False)}")
+        else:
+            self.display.set_status_text(f"Установлено: {format_time(work_duration, show_hours)}")
+
+        if self.engine.is_running:
+            self._schedule_tick()
+
+    def handle_custom_rounds(self):
+        # 1. Запрос количества кругов
+        count_str = simpledialog.askstring(
+            "Настройка кругов",
+            "Количество кругов:\n(Например: 5, или 0 для бесконечного автоповтора)",
+            parent=self.root
+        )
+        if count_str is None:
+            return
+        try:
+            total_rounds = int(count_str.strip())
+            if total_rounds < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning("Ошибка ввода", "Укажите целое число (0, 1, 2...).", parent=self.root)
+            return
+
+        # 2. Время одного круга
+        time_str = simpledialog.askstring(
+            "Время круга",
+            "Длительность одного круга:\n(Например: '30s', '1m', '45', '10:00')",
+            parent=self.root
+        )
+        if time_str is None:
+            return
+        work_sec = parse_time_input(time_str)
+        if not work_sec or work_sec <= 0:
+            messagebox.showwarning("Ошибка ввода", "Не удалось распознать время круга.", parent=self.root)
+            return
+
+        # 3. Время отдыха между кругами
+        rest_sec = 0
+        if total_rounds != 1:
+            rest_str = simpledialog.askstring(
+                "Отдых между кругами",
+                "Время отдыха между кругами (сек):\n(Оставьте 0, если отдых не нужен)",
+                initialvalue="0",
+                parent=self.root
+            )
+            if rest_str:
+                parsed_rest = parse_time_input(rest_str)
+                if parsed_rest is not None and parsed_rest >= 0:
+                    rest_sec = parsed_rest
+
+        self.handle_set_rounds(total_rounds, work_sec, rest_sec)
+
+    def handle_toggle_infinite_loop(self):
+        if self.engine.total_rounds == 0:
+            self.handle_set_rounds(1, self.engine.work_duration, 0)
+        else:
+            self.handle_set_rounds(0, self.engine.work_duration, self.engine.rest_duration)
+
     def handle_custom_time(self):
         prompt = "Введите время:\nНапример: '15' (15 мин), '10:30', '1h 30m', '45s'"
         res = simpledialog.askstring("Задать время", prompt, parent=self.root)
@@ -206,7 +344,7 @@ class TimerApplication:
     def handle_wheel(self, delta_seconds: int):
         if self.engine.is_running:
             return
-        new_duration = max(5.0, self.engine.initial_duration + delta_seconds)
+        new_duration = max(5.0, self.engine.work_duration + delta_seconds)
         self.handle_set_duration(int(new_duration))
 
     def handle_drag_end(self):
@@ -226,15 +364,18 @@ class TimerApplication:
     def trigger_finished(self):
         self.flashing = True
         self.flash_step = 0
+        self.max_flash_steps = 12
         if self.config_manager.get("sound_enabled", True):
             sound_type = self.config_manager.get("sound_type", "Дзынь (Ding)")
             custom_path = self.config_manager.get("custom_sound_path", "")
             play_finish_sound(sound_type, custom_path)
         self.flash_alert()
 
-    def flash_alert(self):
+    def flash_alert(self, max_steps: int = 12):
         if not self.flashing:
-            return
+            self.flashing = True
+            self.flash_step = 0
+            self.max_flash_steps = max_steps
 
         finish_color = self.config_manager.get("finish_color", "#ff3333")
         dim_color = "#666666"
@@ -243,8 +384,8 @@ class TimerApplication:
         current_fg = finish_color if (self.flash_step % 2 != 0) else dim_color
         self.display.label.config(fg=current_fg)
 
-        if self.flash_step < 12:
-            self.root.after(400, self.flash_alert)
+        if self.flash_step < self.max_flash_steps:
+            self.root.after(350, lambda: self.flash_alert(self.max_flash_steps))
         else:
             self.display.label.config(fg=finish_color)
             self.flashing = False

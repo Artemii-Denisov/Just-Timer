@@ -28,6 +28,9 @@ class TimerContextMenu:
         on_choose_custom_sound: Callable[[], None],
         on_preview_sound: Callable[[], None],
         on_toggle_global_hotkeys: Callable[[], None],
+        on_set_rounds: Callable[[int, float, float], None],
+        on_custom_rounds: Callable[[], None],
+        on_toggle_infinite_loop: Callable[[], None],
         on_exit: Callable[[], None],
         initial_topmost: bool = True,
         initial_sound: bool = True,
@@ -63,6 +66,32 @@ class TimerContextMenu:
             )
         self.menu.add_cascade(label="⏱ Быстрое время", menu=presets_menu)
         self.menu.add_command(label="⌨ Задать своё время...", command=on_custom_time)
+
+        # 3. Круги и циклы (раунды)
+        rounds_menu = tk.Menu(self.menu, tearoff=0)
+        rounds_menu.add_command(
+            label="⏹ Обычный режим (1 круг)",
+            command=lambda: on_set_rounds(1, 900, 0)
+        )
+        rounds_menu.add_separator()
+        round_presets = [
+            ("🔁 5 кругов по 30 сек", 5, 30, 0),
+            ("🔁 5 кругов по 30 сек (+10с отдых)", 5, 30, 10),
+            ("🔁 3 круга по 1 мин", 3, 60, 0),
+            ("🔁 4 круга по 1 мин (+15с отдых)", 4, 60, 15),
+            ("🔁 5 кругов по 2 мин", 5, 120, 0),
+            ("🔁 8 кругов Табата (20с / 10с отдых)", 8, 20, 10),
+            ("🔁 4 круга Помодоро (25м / 5м отдых)", 4, 1500, 300),
+        ]
+        for title, count, work, rest in round_presets:
+            rounds_menu.add_command(
+                label=title,
+                command=lambda c=count, w=work, r=rest: on_set_rounds(c, w, r)
+            )
+        rounds_menu.add_separator()
+        rounds_menu.add_command(label="⚙ Настроить свои круги...", command=on_custom_rounds)
+        rounds_menu.add_command(label="♾ Бесконечный цикл (автоповтор)", command=on_toggle_infinite_loop)
+        self.menu.add_cascade(label="🔁 Круги и циклы", menu=rounds_menu)
         self.menu.add_separator()
 
         # 3. Темы оформления
