@@ -19,6 +19,7 @@ class TestConfigManager(unittest.TestCase):
         cm = ConfigManager(self.tmp_config)
         self.assertEqual(cm.get("initial_time"), 900)
         self.assertEqual(cm.get("theme"), "Тёмная (Dark)")
+        self.assertFalse(cm.get("transparent_bg"))
 
     def test_save_and_reload(self):
         cm = ConfigManager(self.tmp_config)

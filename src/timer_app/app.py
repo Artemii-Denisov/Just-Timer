@@ -15,6 +15,9 @@ from .utils.time_parser import parse_time_input, format_time
 from .utils.sound import play_finish_sound
 
 
+TRANSPARENT_COLOR_KEY = "#010101"
+
+
 class TimerApplication:
     def __init__(self, root: tk.Tk, config_path: Optional[str] = None):
         self.root = root
@@ -91,12 +94,15 @@ class TimerApplication:
             on_choose_bg=self.handle_choose_bg,
             on_choose_finish=self.handle_choose_finish,
             on_set_alpha=self.handle_set_alpha,
+            on_toggle_transparent_bg=self.handle_toggle_transparent_bg,
             on_toggle_topmost=self.handle_toggle_topmost,
             on_toggle_sound=self.handle_toggle_sound,
             on_exit=self.exit_app,
             initial_topmost=bool(self.config_manager.get("topmost", True)),
-            initial_sound=bool(self.config_manager.get("sound_enabled", True))
+            initial_sound=bool(self.config_manager.get("sound_enabled", True)),
+            initial_transparent_bg=bool(self.config_manager.get("transparent_bg", False))
         )
+        self.apply_current_colors()
 
     def bind_global_shortcuts(self):
         self.root.bind("<space>", lambda e: self.handle_toggle())
@@ -216,10 +222,22 @@ class TimerApplication:
 
     # === НАСТРОЙКИ ОФОРМЛЕНИЯ ===
     def apply_current_colors(self):
-        bg = self.config_manager.get("bg_color", "#181825")
+        is_transparent = bool(self.config_manager.get("transparent_bg", False))
         fg = self.config_manager.get("fg_color", "#cdd6f4")
+        if is_transparent:
+            bg = TRANSPARENT_COLOR_KEY
+            self.root.wm_attributes("-transparentcolor", TRANSPARENT_COLOR_KEY)
+        else:
+            bg = self.config_manager.get("bg_color", "#181825")
+            self.root.wm_attributes("-transparentcolor", "")
         self.root.configure(bg=bg)
         self.display.update_colors(bg, fg)
+
+    def handle_toggle_transparent_bg(self):
+        val = self.context_menu.transparent_bg_var.get()
+        self.config_manager.set("transparent_bg", val)
+        self.apply_current_colors()
+        self.config_manager.save()
 
     def handle_set_theme(self, theme_name: str):
         if theme_name in THEMES:

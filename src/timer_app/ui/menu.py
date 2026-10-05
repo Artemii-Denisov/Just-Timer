@@ -20,11 +20,13 @@ class TimerContextMenu:
         on_choose_bg: Callable[[], None],
         on_choose_finish: Callable[[], None],
         on_set_alpha: Callable[[float], None],
+        on_toggle_transparent_bg: Callable[[], None],
         on_toggle_topmost: Callable[[], None],
         on_toggle_sound: Callable[[], None],
         on_exit: Callable[[], None],
         initial_topmost: bool = True,
-        initial_sound: bool = True
+        initial_sound: bool = True,
+        initial_transparent_bg: bool = False
     ):
         self.menu = tk.Menu(parent, tearoff=0)
 
@@ -72,7 +74,15 @@ class TimerContextMenu:
         colors_menu.add_command(label="Цвет окончания...", command=on_choose_finish)
         self.menu.add_cascade(label="🖌 Свой цвет", menu=colors_menu)
 
-        # Прозрачность
+        # Чекбокс прозрачного фона
+        self.transparent_bg_var = tk.BooleanVar(value=initial_transparent_bg)
+        self.menu.add_checkbutton(
+            label="👻 Прозрачный фон (только цифры)",
+            variable=self.transparent_bg_var,
+            command=on_toggle_transparent_bg
+        )
+
+        # Прозрачность окна
         alpha_menu = tk.Menu(self.menu, tearoff=0)
         for val in [1.0, 0.9, 0.8, 0.7, 0.6]:
             pct = int(val * 100)

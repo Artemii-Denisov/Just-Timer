@@ -29,6 +29,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "bg_color": "#181825",
     "fg_color": "#cdd6f4",
     "finish_color": "#f38ba8",
+    "transparent_bg": False,
     "topmost": True,
     "alpha": 1.0,
     "sound_enabled": True,
