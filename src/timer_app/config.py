@@ -33,6 +33,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "topmost": True,
     "alpha": 1.0,
     "sound_enabled": True,
+    "sound_type": "Дзынь (Ding)",
+    "custom_sound_path": "",
+    "global_hotkeys_enabled": True,
     "show_hours": True,
     "window_x": None,
     "window_y": None

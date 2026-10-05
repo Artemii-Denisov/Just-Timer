@@ -78,15 +78,33 @@ class TimerDisplay(tk.Frame):
     def bind_mouse_events(self):
         widgets = [self, self.label, self.sub_label]
         for w in widgets:
+            w.bind("<Enter>", self._on_enter)
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_motion)
             w.bind("<ButtonRelease-1>", self._on_release)
             w.bind("<Button-2>", lambda e: self.on_reset())
-            w.bind("<Button-3>", self.on_context_menu)
+            w.bind("<Button-3>", self._on_right_click)
             w.bind("<Double-Button-1>", lambda e: self.on_double_click())
             w.bind("<MouseWheel>", self._on_wheel)
 
+    def _on_enter(self, event: tk.Event):
+        try:
+            self.parent.focus_force()
+        except Exception:
+            pass
+
+    def _on_right_click(self, event: tk.Event):
+        try:
+            self.parent.focus_force()
+        except Exception:
+            pass
+        self.on_context_menu(event)
+
     def _on_press(self, event: tk.Event):
+        try:
+            self.parent.focus_force()
+        except Exception:
+            pass
         self.drag_start_x = event.x_root
         self.drag_start_y = event.y_root
         self.drag_window_x = self.parent.winfo_x()

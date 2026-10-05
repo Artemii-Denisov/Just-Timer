@@ -3,7 +3,7 @@
 """
 
 import tkinter as tk
-from tkinter import simpledialog, messagebox, colorchooser
+from tkinter import simpledialog, messagebox, colorchooser, filedialog
 from typing import Optional
 
 from .core.timer_engine import TimerEngine
@@ -12,8 +12,8 @@ from .ui.display import TimerDisplay
 from .ui.menu import TimerContextMenu
 from .ui.themes import THEMES
 from .utils.time_parser import parse_time_input, format_time
-from .utils.sound import play_finish_sound
-
+from .utils.sound import play_finish_sound, preview_sound, SOUND_PRESETS
+from .utils.hotkeys import GlobalHotkeysManager
 
 TRANSPARENT_COLOR_KEY = "#010101"
 
@@ -31,6 +31,14 @@ class TimerApplication:
         self.flashing = False
         self.flash_step = 0
 
+        # Глобальные горячие клавиши (Ctrl+Alt+Space, Ctrl+Alt+R)
+        self.hotkeys_manager = GlobalHotkeysManager(
+            on_toggle=self.safe_global_toggle,
+            on_reset=self.safe_global_reset
+        )
+        if self.config_manager.get("global_hotkeys_enabled", True):
+            self.hotkeys_manager.start()
+
         self.setup_window()
         self.setup_ui()
         self.bind_global_shortcuts()
@@ -39,6 +47,9 @@ class TimerApplication:
         self.display.update_time_text(
             format_time(self.engine.remaining, self.config_manager.get("show_hours", True))
         )
+
+        # Автоматическая фокусировка при старте
+        self.root.after(100, lambda: self.root.focus_force())
 
     def setup_window(self):
         self.root.title("Timer")
@@ -97,22 +108,37 @@ class TimerApplication:
             on_toggle_transparent_bg=self.handle_toggle_transparent_bg,
             on_toggle_topmost=self.handle_toggle_topmost,
             on_toggle_sound=self.handle_toggle_sound,
+            on_set_sound_type=self.handle_set_sound_type,
+            on_choose_custom_sound=self.handle_choose_custom_sound,
+            on_preview_sound=self.handle_preview_sound,
+            on_toggle_global_hotkeys=self.handle_toggle_global_hotkeys,
             on_exit=self.exit_app,
             initial_topmost=bool(self.config_manager.get("topmost", True)),
             initial_sound=bool(self.config_manager.get("sound_enabled", True)),
-            initial_transparent_bg=bool(self.config_manager.get("transparent_bg", False))
+            initial_sound_type=self.config_manager.get("sound_type", "Дзынь (Ding)"),
+            initial_transparent_bg=bool(self.config_manager.get("transparent_bg", False)),
+            initial_global_hotkeys=bool(self.config_manager.get("global_hotkeys_enabled", True))
         )
         self.apply_current_colors()
 
     def bind_global_shortcuts(self):
-        self.root.bind("<space>", lambda e: self.handle_toggle())
-        self.root.bind("<r>", lambda e: self.handle_reset())
-        self.root.bind("<R>", lambda e: self.handle_reset())
-        self.root.bind("<Escape>", lambda e: self.exit_app())
-        self.root.bind("<Control-q>", lambda e: self.exit_app())
-        self.root.bind("<Control-Q>", lambda e: self.exit_app())
-        self.root.bind("<t>", lambda e: self.toggle_topmost_key())
-        self.root.bind("<T>", lambda e: self.toggle_topmost_key())
+        # Привязка на окно и на дисплей для мгновенной реакции
+        for target in [self.root, self.display, self.display.label, self.display.sub_label]:
+            target.bind("<space>", lambda e: self.handle_toggle())
+            target.bind("<r>", lambda e: self.handle_reset())
+            target.bind("<R>", lambda e: self.handle_reset())
+            target.bind("<Escape>", lambda e: self.exit_app())
+            target.bind("<Control-q>", lambda e: self.exit_app())
+            target.bind("<Control-Q>", lambda e: self.exit_app())
+            target.bind("<t>", lambda e: self.toggle_topmost_key())
+            target.bind("<T>", lambda e: self.toggle_topmost_key())
+
+    # === БЕЗОПАСНЫЕ ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ КЛАВИШ ===
+    def safe_global_toggle(self):
+        self.root.after(0, self.handle_toggle)
+
+    def safe_global_reset(self):
+        self.root.after(0, self.handle_reset)
 
     # === ОБРАБОТЧИКИ СОБЫТИЙ ТАЙМЕРА ===
     def handle_toggle(self):
@@ -195,7 +221,9 @@ class TimerApplication:
         self.flashing = True
         self.flash_step = 0
         if self.config_manager.get("sound_enabled", True):
-            play_finish_sound()
+            sound_type = self.config_manager.get("sound_type", "Дзынь (Ding)")
+            custom_path = self.config_manager.get("custom_sound_path", "")
+            play_finish_sound(sound_type, custom_path)
         self.flash_alert()
 
     def flash_alert(self):
@@ -219,6 +247,39 @@ class TimerApplication:
         self.flashing = False
         fg = self.config_manager.get("fg_color", "#cdd6f4")
         self.display.label.config(fg=fg)
+
+    # === НАСТРОЙКИ ЗВУКА ===
+    def handle_set_sound_type(self, sound_type: str):
+        self.config_manager.set("sound_type", sound_type)
+        self.config_manager.save()
+        preview_sound(sound_type, self.config_manager.get("custom_sound_path"))
+
+    def handle_choose_custom_sound(self):
+        path = filedialog.askopenfilename(
+            title="Выберите звуковой файл (.wav)",
+            filetypes=[("WAV Audio", "*.wav"), ("Все файлы", "*.*")],
+            parent=self.root
+        )
+        if path:
+            self.config_manager.set("sound_type", "Пользовательский")
+            self.config_manager.set("custom_sound_path", path)
+            self.context_menu.sound_type_var.set("Пользовательский")
+            self.config_manager.save()
+            preview_sound("Пользовательский", path)
+
+    def handle_preview_sound(self):
+        sound_type = self.context_menu.sound_type_var.get()
+        custom_path = self.config_manager.get("custom_sound_path", "")
+        preview_sound(sound_type, custom_path)
+
+    def handle_toggle_global_hotkeys(self):
+        val = self.context_menu.global_hotkeys_var.get()
+        self.config_manager.set("global_hotkeys_enabled", val)
+        self.config_manager.save()
+        if val:
+            self.hotkeys_manager.start()
+        else:
+            self.hotkeys_manager.stop()
 
     # === НАСТРОЙКИ ОФОРМЛЕНИЯ ===
     def apply_current_colors(self):
@@ -305,6 +366,8 @@ class TimerApplication:
         self.config_manager.save()
 
     def exit_app(self, event=None):
+        if hasattr(self, 'hotkeys_manager'):
+            self.hotkeys_manager.stop()
         self.config_manager.set("window_x", self.root.winfo_x())
         self.config_manager.set("window_y", self.root.winfo_y())
         self.config_manager.save()
