@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modern-windows-timer"
+version = "1.0.0"
+description = "Простой, удобный и настраиваемый плавающий таймер для Windows"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name = "Denis" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Desktop Environment",
+    "Topic :: Utilities"
+]
+
+[project.scripts]
+timer = "timer_app.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
