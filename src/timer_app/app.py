@@ -111,6 +111,9 @@ class TimerApplication:
         height = int(self.config_manager.get("window_height", 96))
         self.root.geometry(f"{width}x{height}")
 
+        # Отображение окна на панели задач Windows для безрамочного окна (overrideredirect)
+        self.setup_taskbar_presence(ico_path)
+
         # Позиционирование окна
         wx = self.config_manager.get("window_x")
         wy = self.config_manager.get("window_y")
@@ -123,6 +126,56 @@ class TimerApplication:
             init_x = screen_w - width - 40
             init_y = 40
             self.root.geometry(f"+{init_x}+{init_y}")
+
+    def setup_taskbar_presence(self, ico_path: str):
+        """Гарантирует отображение безрамочного окна на панели задач Windows с правильной иконкой."""
+        if sys.platform != "win32":
+            return
+
+        try:
+            import ctypes
+            # Устанавливаем уникальный AppUserModelID, чтобы Windows группировала окно отдельно с его иконкой
+            app_id = "justtimer.timer.app"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+
+            def _apply_taskbar_style():
+                try:
+                    hwnd = self.root.winfo_id()
+                    parent_hwnd = ctypes.windll.user32.GetParent(hwnd)
+                    target_hwnd = parent_hwnd if parent_hwnd else hwnd
+
+                    GWL_EXSTYLE = -20
+                    WS_EX_APPWINDOW = 0x00040000
+                    WS_EX_TOOLWINDOW = 0x00000080
+
+                    style = ctypes.windll.user32.GetWindowLongW(target_hwnd, GWL_EXSTYLE)
+                    style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+                    ctypes.windll.user32.SetWindowLongW(target_hwnd, GWL_EXSTYLE, style)
+
+                    # Устанавливаем иконку окна в заголовке/панели задач через Win32 WM_SETICON
+                    if os.path.exists(ico_path):
+                        WM_SETICON = 0x0080
+                        ICON_SMALL = 0
+                        ICON_BIG = 1
+                        IMAGE_ICON = 1
+                        LR_LOADFROMFILE = 0x00000010
+
+                        hicon_big = ctypes.windll.user32.LoadImageW(
+                            None, ico_path, IMAGE_ICON, 32, 32, LR_LOADFROMFILE
+                        )
+                        hicon_small = ctypes.windll.user32.LoadImageW(
+                            None, ico_path, IMAGE_ICON, 16, 16, LR_LOADFROMFILE
+                        )
+                        if hicon_big:
+                            ctypes.windll.user32.SendMessageW(target_hwnd, WM_SETICON, ICON_BIG, hicon_big)
+                        if hicon_small:
+                            ctypes.windll.user32.SendMessageW(target_hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+                except Exception:
+                    pass
+
+            self.root.after(10, _apply_taskbar_style)
+        except Exception:
+            pass
 
     def setup_ui(self):
         bg = self.config_manager.get("bg_color", "#181825")
