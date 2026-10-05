@@ -1,10 +1,12 @@
-"""
-Удобная точка запуска приложения из корня проекта.
-Запуск: py run.py
-"""
-
 import sys
 import os
+
+try:
+    import ctypes
+    app_id = "Denis.JustTimer.App.1.0"
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+except Exception:
+    pass
 
 # Добавляем каталог src в sys.path
 SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
