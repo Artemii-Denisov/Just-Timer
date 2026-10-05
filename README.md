@@ -1,4 +1,4 @@
-# Modern Windows Timer
+# Just Timer
 
 Простой, удобный и настраиваемый плавающий таймер для Windows с чистой модульной архитектурой.
 
@@ -107,6 +107,6 @@ py -m unittest discover -s tests -v
 ```powershell
 .\scripts\build_exe.bat
 # или
-py -m PyInstaller --onefile --noconsole --name "Timer" --distpath "./dist" --workpath "./build" --paths "./src" run.py
+py -m PyInstaller --onefile --noconsole --name "Just Timer" --distpath "./dist" --workpath "./build" --paths "./src" run.py
 ```
-Готовый `.exe` будет создан в каталоге `dist/Timer.exe`.
+Готовый `.exe` будет создан в каталоге `dist/Just Timer.exe`.

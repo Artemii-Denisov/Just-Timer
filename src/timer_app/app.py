@@ -52,7 +52,7 @@ class TimerApplication:
         self.root.after(100, lambda: self.root.focus_force())
 
     def setup_window(self):
-        self.root.title("Timer")
+        self.root.title("Just Timer")
         self.root.overrideredirect(True)
 
         topmost = bool(self.config_manager.get("topmost", True))
