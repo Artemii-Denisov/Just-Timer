@@ -53,7 +53,7 @@ def _pick_font_family(candidates: Tuple[str, ...], fallback: str) -> str:
 
 class TimerDisplay(tk.Frame):
     MIN_WIDTH = 160
-    MIN_HEIGHT = 56
+    MIN_HEIGHT = 44
 
     def __init__(
         self,
@@ -83,6 +83,7 @@ class TimerDisplay(tk.Frame):
         # Состояние отображения
         self._time_text: str = "00:00:00"
         self._status_text: str = "ЛКМ: старт | ПКМ: меню"
+        self._show_status: bool = True
         self._bg_color: str = bg_color
         self._fg_color: str = fg_color
         self._digit_color: str = fg_color
@@ -104,7 +105,7 @@ class TimerDisplay(tk.Frame):
         self._grip_font = tkfont.Font(family=self.ui_font_family, size=-11)
 
         # Кэш подбора размеров шрифта чтобы не пересчитывать на каждом тике
-        self._cached_layout_key: Optional[Tuple[int, int, str, str]] = None
+        self._cached_layout_key: Optional[Tuple[int, int, str, str, bool]] = None
         self._cached_sizes: Tuple[int, int, int] = (40, 11, 20)
 
         # Состояние перетаскивания, растягивания и кликов
@@ -139,13 +140,18 @@ class TimerDisplay(tk.Frame):
         """Рассчитывает размеры шрифтов в пикселях и высоту нижней полосы статуса."""
         base_text = self._time_text if len(self._time_text) >= 5 else "00:00:00"
         sample = re.sub(r"\d", "8", base_text)
-        layout_key = (w, h, sample, self._status_text)
+        status_part = self._status_text if self._show_status else ""
+        layout_key = (w, h, sample, status_part, self._show_status)
         if self._cached_layout_key == layout_key:
             return self._cached_sizes
 
-        status_band_h = max(18, min(30, int(h * 0.22)))
+        if self._show_status:
+            status_band_h = max(18, min(30, int(h * 0.22)))
+            avail_h = max(24, h - status_band_h - 8)
+        else:
+            status_band_h = 0
+            avail_h = max(24, h - 10)
         avail_w = max(60, w - 24)
-        avail_h = max(24, h - status_band_h - 8)
 
         px_size = max(14, int(avail_h * 0.85))
         self._digit_font.configure(size=-px_size)
@@ -163,12 +169,14 @@ class TimerDisplay(tk.Frame):
                 px_size -= 1
                 self._digit_font.configure(size=-px_size)
 
-        sub_px = max(9, min(14, int(status_band_h * 0.55)))
-        max_sub_w = max(40, w - 32)
-        self._status_font.configure(size=-sub_px)
-        while self._status_font.measure(self._status_text) > max_sub_w and sub_px > 8:
-            sub_px -= 1
+        sub_px = 11
+        if self._show_status:
+            sub_px = max(9, min(14, int(status_band_h * 0.55)))
+            max_sub_w = max(40, w - 32)
             self._status_font.configure(size=-sub_px)
+            while self._status_font.measure(self._status_text) > max_sub_w and sub_px > 8:
+                sub_px -= 1
+                self._status_font.configure(size=-sub_px)
 
         self._cached_layout_key = layout_key
         self._cached_sizes = (px_size, sub_px, status_band_h)
@@ -183,16 +191,12 @@ class TimerDisplay(tk.Frame):
 
         px_size, sub_px, status_band_h = self._compute_layout(w, h)
         self._digit_font.configure(size=-px_size)
-        self._status_font.configure(size=-sub_px)
-        self._grip_font.configure(size=-max(9, min(12, status_band_h // 2)))
 
         self.canvas.configure(bg=self._bg_color)
         self.canvas.delete("all")
 
         main_cx = w // 2
-        main_cy = (h - status_band_h) // 2
-        status_cx = w // 2
-        status_cy = h - status_band_h // 2 - 2
+        main_cy = (h - status_band_h) // 2 if self._show_status else h // 2
 
         if self._transparent_mode:
             # Обводка основного табло для контрастности на любом фоне
@@ -206,19 +210,6 @@ class TimerDisplay(tk.Frame):
                     anchor="center",
                 )
 
-            status_fill = "#2b2d3c" if _is_light_hex(self._outline_color) else "#d0d4e6"
-            for ox, oy in OUTLINE_OFFSETS_STATUS:
-                self.canvas.create_text(
-                    status_cx + ox,
-                    status_cy + oy,
-                    text=self._status_text,
-                    font=self._status_font,
-                    fill=self._outline_color,
-                    anchor="center",
-                )
-        else:
-            status_fill = "#5c5f77" if _is_light_hex(self._bg_color) else "#6c7086"
-
         # Основные цифры
         self.canvas.create_text(
             main_cx,
@@ -229,26 +220,47 @@ class TimerDisplay(tk.Frame):
             anchor="center",
         )
 
-        # Статусная строка
-        self.canvas.create_text(
-            status_cx,
-            status_cy,
-            text=self._status_text,
-            font=self._status_font,
-            fill=status_fill,
-            anchor="center",
-        )
+        if self._show_status:
+            self._status_font.configure(size=-sub_px)
+            self._grip_font.configure(size=-max(9, min(12, status_band_h // 2)))
 
-        # Визуальный уголок изменения размера
-        grip_fill = "#7c8098" if self._transparent_mode else "#5c5f77"
-        self.canvas.create_text(
-            w - 4,
-            h - 2,
-            text="◢",
-            font=self._grip_font,
-            fill=grip_fill,
-            anchor="se",
-        )
+            status_cx = w // 2
+            status_cy = h - status_band_h // 2 - 2
+
+            if self._transparent_mode:
+                status_fill = "#2b2d3c" if _is_light_hex(self._outline_color) else "#d0d4e6"
+                for ox, oy in OUTLINE_OFFSETS_STATUS:
+                    self.canvas.create_text(
+                        status_cx + ox,
+                        status_cy + oy,
+                        text=self._status_text,
+                        font=self._status_font,
+                        fill=self._outline_color,
+                        anchor="center",
+                    )
+            else:
+                status_fill = "#5c5f77" if _is_light_hex(self._bg_color) else "#6c7086"
+
+            # Статусная строка
+            self.canvas.create_text(
+                status_cx,
+                status_cy,
+                text=self._status_text,
+                font=self._status_font,
+                fill=status_fill,
+                anchor="center",
+            )
+
+            # Визуальный уголок изменения размера
+            grip_fill = "#7c8098" if self._transparent_mode else "#5c5f77"
+            self.canvas.create_text(
+                w - 4,
+                h - 2,
+                text="◢",
+                font=self._grip_font,
+                fill=grip_fill,
+                anchor="se",
+            )
 
     def _on_configure(self, event: tk.Event):
         if event.width < 40 or event.height < 20:
@@ -271,6 +283,13 @@ class TimerDisplay(tk.Frame):
     def set_status_text(self, text: str):
         if text != self._status_text:
             self._status_text = text
+            if self._show_status:
+                self._redraw()
+
+    def set_show_status(self, show: bool):
+        show = bool(show)
+        if show != self._show_status:
+            self._show_status = show
             self._redraw()
 
     def update_colors(

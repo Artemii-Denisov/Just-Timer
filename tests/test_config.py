@@ -20,17 +20,20 @@ class TestConfigManager(unittest.TestCase):
         self.assertEqual(cm.get("initial_time"), 900)
         self.assertEqual(cm.get("theme"), "Тёмная (Dark)")
         self.assertFalse(cm.get("transparent_bg"))
+        self.assertTrue(cm.get("show_status"))
 
     def test_save_and_reload(self):
         cm = ConfigManager(self.tmp_config)
         cm.set("initial_time", 1800)
         cm.set("theme", "Киберпанк")
+        cm.set("show_status", False)
         cm.save()
 
         # Загружаем новый экземпляр из того же файла
         cm2 = ConfigManager(self.tmp_config)
         self.assertEqual(cm2.get("initial_time"), 1800)
         self.assertEqual(cm2.get("theme"), "Киберпанк")
+        self.assertFalse(cm2.get("show_status"))
 
 
 if __name__ == "__main__":

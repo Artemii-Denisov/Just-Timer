@@ -40,6 +40,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "round_custom_sound_path": "",
     "global_hotkeys_enabled": True,
     "show_hours": True,
+    "show_status": True,
     "total_rounds": 1,
     "rest_duration": 0,
     "window_x": None,

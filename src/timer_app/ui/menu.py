@@ -22,6 +22,7 @@ class TimerContextMenu:
         on_choose_finish: Callable[[], None],
         on_set_alpha: Callable[[float], None],
         on_toggle_transparent_bg: Callable[[], None],
+        on_toggle_status: Callable[[], None],
         on_toggle_topmost: Callable[[], None],
         on_toggle_sound: Callable[[], None],
         on_set_sound_type: Callable[[str], None],
@@ -42,6 +43,7 @@ class TimerContextMenu:
         initial_round_sound: bool = True,
         initial_round_sound_type: str = "Короткий сигнал (Beep)",
         initial_transparent_bg: bool = False,
+        initial_show_status: bool = True,
         initial_global_hotkeys: bool = True
     ):
         self.menu = tk.Menu(parent, tearoff=0)
@@ -124,6 +126,14 @@ class TimerContextMenu:
             command=on_toggle_transparent_bg
         )
 
+        # 5.1. Показывать строку статуса
+        self.show_status_var = tk.BooleanVar(value=initial_show_status)
+        self.menu.add_checkbutton(
+            label="💬 Показывать строку статуса (S)",
+            variable=self.show_status_var,
+            command=on_toggle_status
+        )
+
         # 6. Прозрачность окна
         alpha_menu = tk.Menu(self.menu, tearoff=0)
         for val in [1.0, 0.9, 0.8, 0.7, 0.6]:
@@ -203,6 +213,7 @@ class TimerContextMenu:
         hotkeys_submenu.add_command(label="В окне: Пробел — Старт/Пауза", state="disabled")
         hotkeys_submenu.add_command(label="В окне: R — Сброс", state="disabled")
         hotkeys_submenu.add_command(label="В окне: T — Поверх всех окон", state="disabled")
+        hotkeys_submenu.add_command(label="В окне: S — Показать/скрыть статус", state="disabled")
         hotkeys_submenu.add_command(label="В окне: Esc — Закрыть", state="disabled")
         self.menu.add_cascade(label="⌨ Горячие клавиши", menu=hotkeys_submenu)
 

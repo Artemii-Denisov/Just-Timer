@@ -203,6 +203,8 @@ class TimerApplication:
             on_context_menu=self.handle_context_menu,
             on_double_click=self.handle_custom_time
         )
+        show_status = bool(self.config_manager.get("show_status", True))
+        self.display.set_show_status(show_status)
 
         self.context_menu = TimerContextMenu(
             parent=self.root,
@@ -216,6 +218,7 @@ class TimerApplication:
             on_choose_finish=self.handle_choose_finish,
             on_set_alpha=self.handle_set_alpha,
             on_toggle_transparent_bg=self.handle_toggle_transparent_bg,
+            on_toggle_status=self.handle_toggle_status,
             on_toggle_topmost=self.handle_toggle_topmost,
             on_toggle_sound=self.handle_toggle_sound,
             on_set_sound_type=self.handle_set_sound_type,
@@ -236,6 +239,7 @@ class TimerApplication:
             initial_round_sound=bool(self.config_manager.get("round_sound_enabled", True)),
             initial_round_sound_type=self.config_manager.get("round_sound_type", "Короткий сигнал (Beep)"),
             initial_transparent_bg=bool(self.config_manager.get("transparent_bg", False)),
+            initial_show_status=show_status,
             initial_global_hotkeys=bool(self.config_manager.get("global_hotkeys_enabled", True))
         )
         self.apply_current_colors()
@@ -281,6 +285,14 @@ class TimerApplication:
             or char_l in ("t", "е")
         ):
             self.toggle_topmost_key()
+            return "break"
+
+        if not ctrl and (
+            (is_win and event.keycode == 83)
+            or keysym_l in ("s", "cyrillic_yeru")
+            or char_l in ("s", "ы")
+        ):
+            self.toggle_status_key()
             return "break"
 
     # === БЕЗОПАСНЫЕ ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ КЛАВИШ ===
@@ -690,6 +702,17 @@ class TimerApplication:
         self.config_manager.set("transparent_bg", val)
         self.apply_current_colors()
         self.config_manager.save()
+
+    def handle_toggle_status(self):
+        val = bool(self.context_menu.show_status_var.get())
+        self.config_manager.set("show_status", val)
+        self.display.set_show_status(val)
+        self.config_manager.save()
+
+    def toggle_status_key(self):
+        new_val = not self.context_menu.show_status_var.get()
+        self.context_menu.show_status_var.set(new_val)
+        self.handle_toggle_status()
 
     def handle_set_theme(self, theme_name: str):
         if theme_name in THEMES:
