@@ -103,6 +103,12 @@ class TimerDisplay(tk.Frame):
         self._digit_font = tkfont.Font(family=self.digit_font_family, size=-40, weight="bold")
         self._status_font = tkfont.Font(family=self.ui_font_family, size=-11)
         self._grip_font = tkfont.Font(family=self.ui_font_family, size=-11)
+        self._measure_digit_font = tkfont.Font(family=self.digit_font_family, size=-40, weight="bold")
+        self._measure_status_font = tkfont.Font(family=self.ui_font_family, size=-11)
+        self._cur_digit_px: int = 40
+        self._cur_status_px: int = 11
+        self._cur_grip_px: int = 11
+        self._current_cursor: str = "fleur"
 
         # Кэш подбора размеров шрифта чтобы не пересчитывать на каждом тике
         self._cached_layout_key: Optional[Tuple[int, int, str, str, bool]] = None
@@ -154,29 +160,29 @@ class TimerDisplay(tk.Frame):
         avail_w = max(60, w - 24)
 
         px_size = max(14, int(avail_h * 0.85))
-        self._digit_font.configure(size=-px_size)
-        m_w = self._digit_font.measure(sample)
-        m_h = self._digit_font.metrics("linespace")
+        self._measure_digit_font.configure(size=-px_size)
+        m_w = self._measure_digit_font.measure(sample)
+        m_h = self._measure_digit_font.metrics("linespace")
 
         if m_w > avail_w or m_h > avail_h:
             scale = min(avail_w / max(1, m_w), avail_h / max(1, m_h))
             px_size = max(12, int(px_size * scale))
-            self._digit_font.configure(size=-px_size)
+            self._measure_digit_font.configure(size=-px_size)
             while (
-                self._digit_font.measure(sample) > avail_w
-                or self._digit_font.metrics("linespace") > avail_h
+                self._measure_digit_font.measure(sample) > avail_w
+                or self._measure_digit_font.metrics("linespace") > avail_h
             ) and px_size > 12:
                 px_size -= 1
-                self._digit_font.configure(size=-px_size)
+                self._measure_digit_font.configure(size=-px_size)
 
         sub_px = 11
         if self._show_status:
             sub_px = max(9, min(14, int(status_band_h * 0.55)))
             max_sub_w = max(40, w - 32)
-            self._status_font.configure(size=-sub_px)
-            while self._status_font.measure(self._status_text) > max_sub_w and sub_px > 8:
+            self._measure_status_font.configure(size=-sub_px)
+            while self._measure_status_font.measure(self._status_text) > max_sub_w and sub_px > 8:
                 sub_px -= 1
-                self._status_font.configure(size=-sub_px)
+                self._measure_status_font.configure(size=-sub_px)
 
         self._cached_layout_key = layout_key
         self._cached_sizes = (px_size, sub_px, status_band_h)
@@ -190,7 +196,9 @@ class TimerDisplay(tk.Frame):
             return
 
         px_size, sub_px, status_band_h = self._compute_layout(w, h)
-        self._digit_font.configure(size=-px_size)
+        if px_size != self._cur_digit_px:
+            self._digit_font.configure(size=-px_size)
+            self._cur_digit_px = px_size
 
         self.canvas.configure(bg=self._bg_color)
         self.canvas.delete("all")
@@ -208,6 +216,7 @@ class TimerDisplay(tk.Frame):
                     font=self._digit_font,
                     fill=self._outline_color,
                     anchor="center",
+                    tags=("main_outline",),
                 )
 
         # Основные цифры
@@ -218,11 +227,17 @@ class TimerDisplay(tk.Frame):
             font=self._digit_font,
             fill=self._digit_color,
             anchor="center",
+            tags=("main_fg",),
         )
 
         if self._show_status:
-            self._status_font.configure(size=-sub_px)
-            self._grip_font.configure(size=-max(9, min(12, status_band_h // 2)))
+            if sub_px != self._cur_status_px:
+                self._status_font.configure(size=-sub_px)
+                self._cur_status_px = sub_px
+            grip_px = max(9, min(12, status_band_h // 2))
+            if grip_px != self._cur_grip_px:
+                self._grip_font.configure(size=-grip_px)
+                self._cur_grip_px = grip_px
 
             status_cx = w // 2
             status_cy = h - status_band_h // 2 - 2
@@ -237,6 +252,7 @@ class TimerDisplay(tk.Frame):
                         font=self._status_font,
                         fill=self._outline_color,
                         anchor="center",
+                        tags=("status_outline",),
                     )
             else:
                 status_fill = "#5c5f77" if _is_light_hex(self._bg_color) else "#6c7086"
@@ -249,6 +265,7 @@ class TimerDisplay(tk.Frame):
                 font=self._status_font,
                 fill=status_fill,
                 anchor="center",
+                tags=("status_fg",),
             )
 
             # Визуальный уголок изменения размера
@@ -270,14 +287,25 @@ class TimerDisplay(tk.Frame):
     def set_digit_color(self, color: str):
         if color != self._digit_color:
             self._digit_color = color
-            self._redraw()
+            if self.canvas.find_withtag("main_fg"):
+                self.canvas.itemconfigure("main_fg", fill=color)
+            else:
+                self._redraw()
 
     def update_time_text(self, text: str, fg: Optional[str] = None):
+        old_pattern = re.sub(r"\d", "8", self._time_text)
+        new_pattern = re.sub(r"\d", "8", text)
         changed = text != self._time_text or (fg is not None and fg != self._digit_color)
         self._time_text = text
         if fg:
             self._digit_color = fg
-        if changed:
+        if not changed:
+            return
+        if old_pattern == new_pattern and self.canvas.find_withtag("main_fg"):
+            if self._transparent_mode:
+                self.canvas.itemconfigure("main_outline", text=self._time_text)
+            self.canvas.itemconfigure("main_fg", text=self._time_text, fill=self._digit_color)
+        else:
             self._redraw()
 
     def set_status_text(self, text: str):
@@ -309,18 +337,16 @@ class TimerDisplay(tk.Frame):
         self._redraw()
 
     def bind_mouse_events(self):
-        for w in (self, self.canvas):
-            w.bind("<Enter>", self._on_enter)
-            w.bind("<Motion>", self._on_mouse_hover)
-            w.bind("<ButtonPress-1>", self._on_press)
-            w.bind("<B1-Motion>", self._on_motion)
-            w.bind("<ButtonRelease-1>", self._on_release)
-            w.bind("<Button-2>", lambda e: self.on_reset())
-            w.bind("<Button-3>", self._on_right_click)
-            w.bind("<Double-Button-1>", self._on_double_click)
-            w.bind("<MouseWheel>", self._on_wheel)
-            w.bind("<Button-4>", lambda e: self.on_wheel(60))
-            w.bind("<Button-5>", lambda e: self.on_wheel(-60))
+        self.canvas.bind("<Motion>", self._on_mouse_hover)
+        self.canvas.bind("<ButtonPress-1>", self._on_press)
+        self.canvas.bind("<B1-Motion>", self._on_motion)
+        self.canvas.bind("<ButtonRelease-1>", self._on_release)
+        self.canvas.bind("<Button-2>", lambda e: self.on_reset())
+        self.canvas.bind("<ButtonRelease-3>", self._on_right_click)
+        self.canvas.bind("<Double-Button-1>", self._on_double_click)
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<Button-4>", lambda e: self.on_wheel(60))
+        self.canvas.bind("<Button-5>", lambda e: self.on_wheel(-60))
 
     def _determine_zone(self, event: tk.Event) -> str:
         """Определяет зону курсора: 4 угла, 4 края или перемещение."""
@@ -381,23 +407,16 @@ class TimerDisplay(tk.Frame):
     def _on_mouse_hover(self, event: tk.Event):
         """Динамическая смена курсора мыши при наведении на края и углы."""
         cursor = self._cursor_for_zone(self._determine_zone(event))
-        try:
-            event.widget.config(cursor=cursor)
-        except tk.TclError:
-            pass
-
-    def _on_enter(self, event: tk.Event):
-        try:
-            self.parent.focus_force()
-        except Exception:
-            pass
+        if cursor != self._current_cursor:
+            self._current_cursor = cursor
+            try:
+                self.canvas.config(cursor=cursor)
+            except tk.TclError:
+                pass
 
     def _on_right_click(self, event: tk.Event):
-        try:
-            self.parent.focus_force()
-        except Exception:
-            pass
         self.on_context_menu(event)
+        return "break"
 
     def _on_press(self, event: tk.Event):
         try:

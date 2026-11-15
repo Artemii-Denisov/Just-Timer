@@ -229,4 +229,10 @@ class TimerContextMenu:
         self.menu.add_command(label="✕ Закрыть  (Esc)", command=on_exit)
 
     def show(self, x: int, y: int):
-        self.menu.tk_popup(x, y)
+        try:
+            self.menu.tk_popup(x + 2, y + 2)
+        finally:
+            try:
+                self.menu.grab_release()
+            except Exception:
+                pass
