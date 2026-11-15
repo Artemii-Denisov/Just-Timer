@@ -10,38 +10,76 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller pillow
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller
 
       - name: Run unit tests
-        run: |
-          python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -v
 
-      - name: Build Executable with PyInstaller
+      - name: Build Windows executable
         run: |
-          pyinstaller --onefile --noconsole --name "Just Timer" --icon="assets/icon.ico" --add-data="assets;assets" --paths="src" run.py
+          python -m PyInstaller --clean --onefile --noconsole --name "Just Timer" --icon="assets/icon.ico" --add-data="assets;assets" --paths="src" run.py
 
-      - name: Create GitHub Release
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Just-Timer-Windows
+          path: dist/Just Timer.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install system and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+          python -m pip install --upgrade pip pyinstaller
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Linux binary
+        run: |
+          chmod +x scripts/build_linux.sh
+          ./scripts/build_linux.sh
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Just-Timer-Linux
+          path: dist/Just-Timer-Linux
+
+  release:
+    needs: [build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           name: "Just Timer ${{ github.ref_name }}"
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           files: |
-            dist/Just Timer.exe
+            artifacts/Just-Timer-Windows/Just Timer.exe
+            artifacts/Just-Timer-Linux/Just-Timer-Linux

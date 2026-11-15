@@ -24,6 +24,22 @@ class TestSound(unittest.TestCase):
         except Exception as e:
             self.fail(f"Sound functions raised {e}")
 
+    def test_generate_wav_tone(self):
+        import wave
+        from timer_app.utils.sound import _generate_wav_tone
+
+        wav_path = _generate_wav_tone([(1046.5, 0.05), (0.0, 0.02), (880.0, 0.05)], "unit_test_tone.wav")
+        self.assertIsNotNone(wav_path)
+        self.assertTrue(os.path.exists(wav_path))
+        try:
+            with wave.open(wav_path, "rb") as wf:
+                self.assertEqual(wf.getnchannels(), 1)
+                self.assertEqual(wf.getsampwidth(), 2)
+                self.assertGreater(wf.getnframes(), 0)
+        finally:
+            if wav_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+
 
 if __name__ == "__main__":
     unittest.main()

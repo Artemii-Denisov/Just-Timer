@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "just-timer"
-version = "1.0.0"
-description = "Just Timer — простой, удобный и настраиваемый плавающий таймер для Windows"
+version = "1.1.0"
+description = "Just Timer — простой, удобный и настраиваемый плавающий таймер для Windows и Linux"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
@@ -14,6 +14,7 @@ authors = [
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Desktop Environment",
     "Topic :: Utilities"
 ]

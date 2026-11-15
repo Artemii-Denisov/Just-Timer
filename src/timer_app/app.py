@@ -17,6 +17,7 @@ from .utils.time_parser import parse_time_input, format_time
 from .utils.sound import play_finish_sound, play_round_sound, preview_sound, SOUND_PRESETS
 from .utils.hotkeys import GlobalHotkeysManager
 
+APP_USER_MODEL_ID = "Denis.JustTimer.App.1.0"
 TRANSPARENT_COLOR_KEY = "#010101"
 
 
@@ -44,10 +45,13 @@ class TimerApplication:
             rest_duration=rest_duration
         )
 
-        # Состояние анимации мигания
+        # Состояние анимации мигания и планировщика тиков
         self.flashing = False
         self.flash_step = 0
         self.max_flash_steps = 12
+        self._restore_fg_at_end = False
+        self._tick_job: Optional[str] = None
+        self._flash_job: Optional[str] = None
 
         # Глобальные горячие клавиши (Ctrl+Alt+Space, Ctrl+Alt+R)
         self.hotkeys_manager = GlobalHotkeysManager(
@@ -104,8 +108,14 @@ class TimerApplication:
 
         topmost = bool(self.config_manager.get("topmost", True))
         alpha = float(self.config_manager.get("alpha", 1.0))
-        self.root.attributes("-topmost", topmost)
-        self.root.attributes("-alpha", alpha)
+        try:
+            self.root.attributes("-topmost", topmost)
+        except tk.TclError:
+            pass
+        try:
+            self.root.attributes("-alpha", alpha)
+        except tk.TclError:
+            pass
 
         width = int(self.config_manager.get("window_width", 330))
         height = int(self.config_manager.get("window_height", 96))
@@ -135,8 +145,7 @@ class TimerApplication:
         try:
             import ctypes
             # Устанавливаем уникальный AppUserModelID, чтобы Windows группировала окно отдельно с его иконкой
-            app_id = "justtimer.timer.app"
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
 
             def _apply_taskbar_style():
                 try:
@@ -232,15 +241,47 @@ class TimerApplication:
         self.apply_current_colors()
 
     def bind_global_shortcuts(self):
-        for target in [self.root, self.display, self.display.label, self.display.sub_label]:
-            target.bind("<space>", lambda e: self.handle_toggle())
-            target.bind("<r>", lambda e: self.handle_reset())
-            target.bind("<R>", lambda e: self.handle_reset())
-            target.bind("<Escape>", lambda e: self.exit_app())
-            target.bind("<Control-q>", lambda e: self.exit_app())
-            target.bind("<Control-Q>", lambda e: self.exit_app())
-            target.bind("<t>", lambda e: self.toggle_topmost_key())
-            target.bind("<T>", lambda e: self.toggle_topmost_key())
+        for target in (self.root, self.display, self.display.canvas):
+            target.bind("<KeyPress>", self._on_key_press)
+
+    def _on_key_press(self, event: tk.Event):
+        """Обработка горячих клавиш независимо от раскладки клавиатуры."""
+        ctrl = (event.state & 0x4) != 0
+        is_win = sys.platform == "win32"
+        keysym_l = event.keysym.lower() if event.keysym else ""
+        char_l = event.char.lower() if event.char else ""
+
+        if event.keysym == "Escape" or (is_win and event.keycode == 27):
+            self.exit_app()
+            return "break"
+
+        if ctrl and (
+            (is_win and event.keycode == 81)
+            or keysym_l in ("q", "cyrillic_shorti")
+            or char_l in ("q", "й", "\x11")
+        ):
+            self.exit_app()
+            return "break"
+
+        if event.keysym == "space" or (is_win and event.keycode == 32):
+            self.handle_toggle()
+            return "break"
+
+        if not ctrl and (
+            (is_win and event.keycode == 82)
+            or keysym_l in ("r", "cyrillic_ka")
+            or char_l in ("r", "к")
+        ):
+            self.handle_reset()
+            return "break"
+
+        if not ctrl and (
+            (is_win and event.keycode == 84)
+            or keysym_l in ("t", "cyrillic_ie")
+            or char_l in ("t", "е")
+        ):
+            self.toggle_topmost_key()
+            return "break"
 
     # === БЕЗОПАСНЫЕ ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ КЛАВИШ ===
     def safe_global_toggle(self):
@@ -250,6 +291,18 @@ class TimerApplication:
         self.root.after(0, self.handle_reset)
 
     # === ОБРАБОТЧИКИ СОБЫТИЙ ТАЙМЕРА ===
+    def _cancel_tick(self):
+        if self._tick_job is not None:
+            try:
+                self.root.after_cancel(self._tick_job)
+            except Exception:
+                pass
+            self._tick_job = None
+
+    def _start_tick(self):
+        self._cancel_tick()
+        self._tick_job = self.root.after(100, self._schedule_tick)
+
     def handle_toggle(self):
         if self.flashing:
             self.stop_flashing()
@@ -259,8 +312,9 @@ class TimerApplication:
         is_running = self.engine.toggle()
         if is_running:
             self.update_running_status()
-            self._schedule_tick()
+            self._start_tick()
         else:
+            self._cancel_tick()
             if self.engine.total_rounds > 1:
                 self.display.set_status_text(f"⏸ Пауза (Круг {self.engine.current_round}/{self.engine.total_rounds})")
             elif self.engine.total_rounds == 0:
@@ -285,6 +339,7 @@ class TimerApplication:
             self.display.set_status_text("▶ Таймер запущен")
 
     def _schedule_tick(self):
+        self._tick_job = None
         if not self.engine.is_running:
             return
 
@@ -303,8 +358,8 @@ class TimerApplication:
                     round_sound_type = self.config_manager.get("round_sound_type", "Короткий сигнал (Beep)")
                     custom_path = self.config_manager.get("round_custom_sound_path", "")
                     play_round_sound(round_sound_type, custom_path)
-                self.flash_alert(max_steps=4)
-                self.root.after(100, self._schedule_tick)
+                self.start_flashing(max_steps=4, restore_fg_at_end=True)
+                self._tick_job = self.root.after(100, self._schedule_tick)
                 return
 
             elif ev == "all_finished":
@@ -317,9 +372,10 @@ class TimerApplication:
                 self.trigger_finished()
                 return
 
-        self.root.after(100, self._schedule_tick)
+        self._tick_job = self.root.after(100, self._schedule_tick)
 
     def handle_reset(self):
+        self._cancel_tick()
         self.engine.reset()
         self.stop_flashing()
         show_hours = self.config_manager.get("show_hours", True)
@@ -339,7 +395,7 @@ class TimerApplication:
         self.display.update_time_text(format_time(self.engine.remaining, show_hours))
 
         if self.engine.is_running:
-            self._schedule_tick()
+            self._start_tick()
         else:
             self.display.set_status_text(f"Установлено: {format_time(seconds, show_hours)}")
 
@@ -364,7 +420,7 @@ class TimerApplication:
             self.display.set_status_text(f"Установлено: {format_time(work_duration, show_hours)}")
 
         if self.engine.is_running:
-            self._schedule_tick()
+            self._start_tick()
 
     def handle_custom_rounds(self):
         # 1. Запрос количества кругов
@@ -431,8 +487,24 @@ class TimerApplication:
     def handle_wheel(self, delta_seconds: int):
         if self.engine.is_running:
             return
-        new_duration = max(5.0, self.engine.work_duration + delta_seconds)
-        self.handle_set_duration(int(new_duration))
+        if self.engine.work_duration < 60 or (self.engine.work_duration == 60 and delta_seconds < 0):
+            step = 10 if delta_seconds > 0 else -10
+        else:
+            step = 60 if delta_seconds > 0 else -60
+
+        new_duration = max(5.0, self.engine.work_duration + step)
+        self.stop_flashing()
+        self.engine.set_duration(new_duration)
+        self.config_manager.set("initial_time", int(new_duration))
+        self.config_manager.save()
+
+        show_hours = self.config_manager.get("show_hours", True)
+        self.display.update_time_text(format_time(self.engine.remaining, show_hours))
+
+        if self.engine.total_rounds != 1:
+            self.update_initial_status()
+        else:
+            self.display.set_status_text(f"Установлено: {format_time(new_duration, show_hours)}")
 
     def handle_drag_end(self):
         self.config_manager.set("window_x", self.root.winfo_x())
@@ -449,38 +521,61 @@ class TimerApplication:
 
     # === ЗАВЕРШЕНИЕ И СИГНАЛЫ ===
     def trigger_finished(self):
-        self.flashing = True
-        self.flash_step = 0
-        self.max_flash_steps = 12
         if self.config_manager.get("sound_enabled", True):
             sound_type = self.config_manager.get("sound_type", "Дзынь (Ding)")
             custom_path = self.config_manager.get("custom_sound_path", "")
             play_finish_sound(sound_type, custom_path)
-        self.flash_alert()
+        self.start_flashing(max_steps=12, restore_fg_at_end=False)
 
-    def flash_alert(self, max_steps: int = 12):
+    def start_flashing(self, max_steps: int = 12, restore_fg_at_end: bool = False):
+        if self._flash_job is not None:
+            try:
+                self.root.after_cancel(self._flash_job)
+            except Exception:
+                pass
+            self._flash_job = None
+
+        self.flashing = True
+        self.flash_step = 0
+        self.max_flash_steps = max_steps
+        self._restore_fg_at_end = restore_fg_at_end
+        self._flash_tick()
+
+    def _flash_tick(self):
+        self._flash_job = None
         if not self.flashing:
-            self.flashing = True
-            self.flash_step = 0
-            self.max_flash_steps = max_steps
+            return
 
         finish_color = self.config_manager.get("finish_color", "#ff3333")
         dim_color = "#666666"
 
         self.flash_step += 1
         current_fg = finish_color if (self.flash_step % 2 != 0) else dim_color
-        self.display.label.config(fg=current_fg)
+        self.display.set_digit_color(current_fg)
 
         if self.flash_step < self.max_flash_steps:
-            self.root.after(350, lambda: self.flash_alert(self.max_flash_steps))
+            self._flash_job = self.root.after(350, self._flash_tick)
         else:
-            self.display.label.config(fg=finish_color)
             self.flashing = False
+            if self._restore_fg_at_end or self.engine.is_running:
+                fg = self.config_manager.get("fg_color", "#cdd6f4")
+                self.display.set_digit_color(fg)
+            else:
+                self.display.set_digit_color(finish_color)
+
+    def flash_alert(self, max_steps: int = 12):
+        self.start_flashing(max_steps=max_steps, restore_fg_at_end=False)
 
     def stop_flashing(self):
         self.flashing = False
+        if self._flash_job is not None:
+            try:
+                self.root.after_cancel(self._flash_job)
+            except Exception:
+                pass
+            self._flash_job = None
         fg = self.config_manager.get("fg_color", "#cdd6f4")
-        self.display.label.config(fg=fg)
+        self.display.set_digit_color(fg)
 
     # === НАСТРОЙКИ ЗВУКА ===
     def handle_set_sound_type(self, sound_type: str):
@@ -544,17 +639,51 @@ class TimerApplication:
             self.hotkeys_manager.stop()
 
     # === НАСТРОЙКИ ОФОРМЛЕНИЯ ===
+    @staticmethod
+    def _compute_transparent_colors(fg_color: str):
+        """Выбирает контрастный цвет обводки и смежный хромакей без ореола ClearType."""
+        lum = 1.0
+        if fg_color and fg_color.startswith("#") and len(fg_color) == 7:
+            try:
+                r = int(fg_color[1:3], 16)
+                g = int(fg_color[3:5], 16)
+                b = int(fg_color[5:7], 16)
+                lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+            except ValueError:
+                pass
+        if lum > 0.35:
+            return "#181824", "#181825"
+        return "#f0f0f4", "#f0f0f5"
+
     def apply_current_colors(self):
         is_transparent = bool(self.config_manager.get("transparent_bg", False))
         fg = self.config_manager.get("fg_color", "#cdd6f4")
         if is_transparent:
-            bg = TRANSPARENT_COLOR_KEY
-            self.root.wm_attributes("-transparentcolor", TRANSPARENT_COLOR_KEY)
+            chroma_key, outline_color = self._compute_transparent_colors(fg)
+            bg = chroma_key
+            try:
+                self.root.wm_attributes("-transparentcolor", chroma_key)
+            except tk.TclError:
+                # На Linux -transparentcolor не поддерживается; используем полупрозрачный HUD-фон
+                bg = outline_color
+                try:
+                    self.root.attributes("-alpha", min(float(self.config_manager.get("alpha", 1.0)), 0.78))
+                except tk.TclError:
+                    pass
+            self.root.configure(bg=bg)
+            self.display.update_colors(bg, fg, transparent_mode=True, outline_color=outline_color)
         else:
             bg = self.config_manager.get("bg_color", "#181825")
-            self.root.wm_attributes("-transparentcolor", "")
-        self.root.configure(bg=bg)
-        self.display.update_colors(bg, fg)
+            try:
+                self.root.wm_attributes("-transparentcolor", "")
+            except tk.TclError:
+                pass
+            try:
+                self.root.attributes("-alpha", float(self.config_manager.get("alpha", 1.0)))
+            except tk.TclError:
+                pass
+            self.root.configure(bg=bg)
+            self.display.update_colors(bg, fg, transparent_mode=False)
 
     def handle_toggle_transparent_bg(self):
         val = self.context_menu.transparent_bg_var.get()
@@ -608,13 +737,19 @@ class TimerApplication:
 
     def handle_set_alpha(self, alpha_val: float):
         self.config_manager.set("alpha", alpha_val)
-        self.root.attributes("-alpha", alpha_val)
+        try:
+            self.root.attributes("-alpha", alpha_val)
+        except tk.TclError:
+            pass
         self.config_manager.save()
 
     def handle_toggle_topmost(self):
         val = self.context_menu.topmost_var.get()
         self.config_manager.set("topmost", val)
-        self.root.attributes("-topmost", val)
+        try:
+            self.root.attributes("-topmost", val)
+        except tk.TclError:
+            pass
         self.config_manager.save()
 
     def toggle_topmost_key(self):
@@ -628,6 +763,13 @@ class TimerApplication:
         self.config_manager.save()
 
     def exit_app(self, event=None):
+        self._cancel_tick()
+        if self._flash_job is not None:
+            try:
+                self.root.after_cancel(self._flash_job)
+            except Exception:
+                pass
+            self._flash_job = None
         if hasattr(self, 'hotkeys_manager'):
             self.hotkeys_manager.stop()
         self.config_manager.set("window_x", self.root.winfo_x())

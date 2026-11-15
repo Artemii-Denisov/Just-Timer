@@ -8,9 +8,12 @@ import threading
 from typing import Callable
 
 try:
-    import ctypes
-    from ctypes import wintypes
-    user32 = ctypes.windll.user32
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+    else:
+        user32 = None
 except Exception:
     user32 = None
 
@@ -47,6 +50,10 @@ class GlobalHotkeysManager:
                 user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)
             except Exception:
                 pass
+        if self.thread and self.thread.is_alive() and threading.current_thread() is not self.thread:
+            self.thread.join(timeout=0.3)
+        self.thread = None
+        self.thread_id = 0
 
     def _loop(self):
         self.thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
