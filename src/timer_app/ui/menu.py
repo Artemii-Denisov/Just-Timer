@@ -21,6 +21,8 @@ class TimerContextMenu:
         on_choose_bg: Callable[[], None],
         on_choose_finish: Callable[[], None],
         on_set_alpha: Callable[[float], None],
+        on_set_size: Callable[[int, int], None],
+        on_zoom: Callable[[int], None],
         on_toggle_transparent_bg: Callable[[], None],
         on_toggle_status: Callable[[], None],
         on_toggle_topmost: Callable[[], None],
@@ -134,6 +136,25 @@ class TimerContextMenu:
             command=on_toggle_status
         )
 
+        # 5.2. Размер окна
+        size_menu = tk.Menu(self.menu, tearoff=0)
+        size_presets = [
+            ("Мелкий (240 × 70)", 240, 70),
+            ("Стандартный (330 × 96)", 330, 96),
+            ("Средний (420 × 122)", 420, 122),
+            ("Крупный (520 × 150)", 520, 150),
+            ("Огромный (650 × 188)", 650, 188),
+        ]
+        for name, w, h in size_presets:
+            size_menu.add_command(
+                label=name,
+                command=lambda sw=w, sh=h: on_set_size(sw, sh)
+            )
+        size_menu.add_separator()
+        size_menu.add_command(label="➕ Увеличить  (Ctrl + Колёсико / +)", command=lambda: on_zoom(1))
+        size_menu.add_command(label="➖ Уменьшить  (Ctrl + Колёсико / -)", command=lambda: on_zoom(-1))
+        self.menu.add_cascade(label="📐 Размер окна", menu=size_menu)
+
         # 6. Прозрачность окна
         alpha_menu = tk.Menu(self.menu, tearoff=0)
         for val in [1.0, 0.9, 0.8, 0.7, 0.6]:
@@ -214,6 +235,9 @@ class TimerContextMenu:
         hotkeys_submenu.add_command(label="В окне: R — Сброс", state="disabled")
         hotkeys_submenu.add_command(label="В окне: T — Поверх всех окон", state="disabled")
         hotkeys_submenu.add_command(label="В окне: S — Показать/скрыть статус", state="disabled")
+        hotkeys_submenu.add_command(label="В окне: Ctrl + Колёсико — Масштаб окна", state="disabled")
+        hotkeys_submenu.add_command(label="В окне: + / - — Масштаб окна", state="disabled")
+        hotkeys_submenu.add_command(label="В окне: Shift + Зажатие ЛКМ — Растянуть", state="disabled")
         hotkeys_submenu.add_command(label="В окне: Esc — Закрыть", state="disabled")
         self.menu.add_cascade(label="⌨ Горячие клавиши", menu=hotkeys_submenu)
 

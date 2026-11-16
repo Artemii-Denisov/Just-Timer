@@ -199,6 +199,7 @@ class TimerApplication:
             on_drag_end=self.handle_drag_end,
             on_resize_end=self.handle_resize_end,
             on_wheel=self.handle_wheel,
+            on_zoom=self.zoom_window,
             on_reset=self.handle_reset,
             on_context_menu=self.handle_context_menu,
             on_double_click=self.handle_custom_time
@@ -217,6 +218,8 @@ class TimerApplication:
             on_choose_bg=self.handle_choose_bg,
             on_choose_finish=self.handle_choose_finish,
             on_set_alpha=self.handle_set_alpha,
+            on_set_size=self.set_window_size,
+            on_zoom=self.zoom_window,
             on_toggle_transparent_bg=self.handle_toggle_transparent_bg,
             on_toggle_status=self.handle_toggle_status,
             on_toggle_topmost=self.handle_toggle_topmost,
@@ -293,6 +296,15 @@ class TimerApplication:
             or char_l in ("s", "ы")
         ):
             self.toggle_status_key()
+            return "break"
+
+        # Масштабирование окна клавишами + / = (увеличить) и - / _ (уменьшить)
+        if keysym_l in ("plus", "equal", "kp_add") or char_l in ("+", "="):
+            self.zoom_window(1)
+            return "break"
+
+        if keysym_l in ("minus", "underscore", "kp_subtract") or char_l in ("-", "_"):
+            self.zoom_window(-1)
             return "break"
 
     # === БЕЗОПАСНЫЕ ОБРАБОТЧИКИ ГЛОБАЛЬНЫХ КЛАВИШ ===
@@ -527,6 +539,31 @@ class TimerApplication:
         self.config_manager.set("window_width", self.root.winfo_width())
         self.config_manager.set("window_height", self.root.winfo_height())
         self.config_manager.save()
+
+    def set_window_size(self, width: int, height: int):
+        width = max(TimerDisplay.MIN_WIDTH, int(width))
+        height = max(TimerDisplay.MIN_HEIGHT, int(height))
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.config_manager.set("window_width", width)
+        self.config_manager.set("window_height", height)
+        self.config_manager.save()
+
+    def zoom_window(self, step: int):
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
+        ratio = w / max(1, h)
+        factor = 1.12 if step > 0 else 0.89
+        new_w = max(TimerDisplay.MIN_WIDTH, min(1920, int(w * factor)))
+        new_h = max(TimerDisplay.MIN_HEIGHT, min(1080, int(new_w / ratio)))
+        if new_w == w and step > 0:
+            new_w += 20
+            new_h = max(TimerDisplay.MIN_HEIGHT, int(new_w / ratio))
+        elif new_w == w and step < 0:
+            new_w = max(TimerDisplay.MIN_WIDTH, new_w - 20)
+            new_h = max(TimerDisplay.MIN_HEIGHT, int(new_w / ratio))
+        self.set_window_size(new_w, new_h)
 
     def handle_context_menu(self, event: tk.Event):
         self.context_menu.show(event.x_root, event.y_root)

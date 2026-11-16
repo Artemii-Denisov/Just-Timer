@@ -64,6 +64,7 @@ class TimerDisplay(tk.Frame):
         on_drag_end: Callable[[], None],
         on_resize_end: Callable[[], None],
         on_wheel: Callable[[int], None],
+        on_zoom: Callable[[int], None],
         on_reset: Callable[[], None],
         on_context_menu: Callable[[tk.Event], None],
         on_double_click: Callable[[], None],
@@ -74,6 +75,7 @@ class TimerDisplay(tk.Frame):
         self.on_drag_end = on_drag_end
         self.on_resize_end = on_resize_end
         self.on_wheel = on_wheel
+        self.on_zoom = on_zoom
         self.on_reset = on_reset
         self.on_context_menu = on_context_menu
         self.on_double_click = on_double_click
@@ -268,16 +270,22 @@ class TimerDisplay(tk.Frame):
                 tags=("status_fg",),
             )
 
-            # Визуальный уголок изменения размера
-            grip_fill = "#7c8098" if self._transparent_mode else "#5c5f77"
-            self.canvas.create_text(
-                w - 4,
-                h - 2,
-                text="◢",
-                font=self._grip_font,
-                fill=grip_fill,
-                anchor="se",
-            )
+        # Визуальный уголок изменения размера (всегда отображается в нижнем правом углу)
+        grip_px = max(9, min(12, int(h * 0.14)))
+        if grip_px != self._cur_grip_px:
+            self._grip_font.configure(size=-grip_px)
+            self._cur_grip_px = grip_px
+
+        grip_fill = "#7c8098" if self._transparent_mode else "#5c5f77"
+        self.canvas.create_text(
+            w - 4,
+            h - 2,
+            text="◢",
+            font=self._grip_font,
+            fill=grip_fill,
+            anchor="se",
+            tags=("grip",),
+        )
 
     def _on_configure(self, event: tk.Event):
         if event.width < 40 or event.height < 20:
@@ -345,8 +353,8 @@ class TimerDisplay(tk.Frame):
         self.canvas.bind("<ButtonRelease-3>", self._on_right_click)
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
         self.canvas.bind("<MouseWheel>", self._on_wheel)
-        self.canvas.bind("<Button-4>", lambda e: self.on_wheel(60))
-        self.canvas.bind("<Button-5>", lambda e: self.on_wheel(-60))
+        self.canvas.bind("<Button-4>", self._on_button4)
+        self.canvas.bind("<Button-5>", self._on_button5)
 
     def _determine_zone(self, event: tk.Event) -> str:
         """Определяет зону курсора: 4 угла, 4 края или перемещение."""
@@ -431,7 +439,11 @@ class TimerDisplay(tk.Frame):
         self.start_win_w = self.parent.winfo_width()
         self.start_win_h = self.parent.winfo_height()
 
-        self.active_zone = self._determine_zone(event)
+        # Если зажат Shift, то сразу переводим в режим растягивания SE из любой точки
+        if (event.state & 1) != 0:
+            self.active_zone = "SE"
+        else:
+            self.active_zone = self._determine_zone(event)
         self.action_performed = False
         self._double_click_flag = False
 
@@ -497,5 +509,22 @@ class TimerDisplay(tk.Frame):
         self.on_double_click()
 
     def _on_wheel(self, event: tk.Event):
+        # Если зажат Ctrl — масштабируем размер окна
+        if (event.state & 4) != 0:
+            step = 1 if event.delta > 0 else -1
+            self.on_zoom(step)
+            return
         delta = 60 if event.delta > 0 else -60
         self.on_wheel(delta)
+
+    def _on_button4(self, event: tk.Event):
+        if (event.state & 4) != 0:
+            self.on_zoom(1)
+        else:
+            self.on_wheel(60)
+
+    def _on_button5(self, event: tk.Event):
+        if (event.state & 4) != 0:
+            self.on_zoom(-1)
+        else:
+            self.on_wheel(-60)
