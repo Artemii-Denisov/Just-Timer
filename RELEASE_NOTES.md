@@ -23,4 +23,4 @@
 
 ### Установка:
 - **Windows**: скачайте `Just Timer.exe` и запустите его (установка Python не требуется).
-- **Linux**: скачайте бинарный файл `Just-Timer-Linux` (если прикреплён к релизу) и сделайте его исполняемым (`chmod +x Just-Timer-Linux && ./Just-Timer-Linux`), либо соберите командой `./scripts/build_linux.sh` (потребуется `python3-tk`).
+- **Linux**: скачайте прикрепленный файл `Just-Timer-Linux` и сделайте его исполняемым (`chmod +x Just-Timer-Linux && ./Just-Timer-Linux`), либо соберите командой `./scripts/build_linux.sh` (потребуется `python3-tk`).
